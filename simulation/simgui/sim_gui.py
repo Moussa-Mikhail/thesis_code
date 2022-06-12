@@ -16,8 +16,8 @@ from PyQt5.QtWidgets import (
 )
 
 # pylint: disable=unused-import
-from constants import constants_names, earth_mass, sun_mass  # noqa: F401
-from simulation import main as simMain
+from simulation.constants import safe_eval as safeEval  # noqa: F401
+from simulation.simulation import main as simMain
 
 simMain = simMain.__wrapped__
 
@@ -111,7 +111,7 @@ class ThesisUi(QMainWindow):
 
         argLabel = QLabel(argLabelText)
 
-        argLabel.setAlignment(Qt.AlignCenter)
+        argLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self._inputsLayout.addRow(argLabel)
 
@@ -176,11 +176,25 @@ class ThesisCtrl:
 
     def _simulate(self):
 
-        simulationInputs = self._getSimulationInputs()
+        try:
+
+            simulationInputs = self._getSimulationInputs()
+
+        except (ValueError, SyntaxError, ZeroDivisionError):
+
+            return
 
         translatedInputs = _translateInputs(simulationInputs)
 
-        orbitPlot, corotatingPlot, timer = self._model(**translatedInputs)
+        try:
+
+            orbitPlot, corotatingPlot, timer = self._model(**translatedInputs)
+
+        except (TypeError, ValueError) as e:
+
+            errorMessage(str(e))
+
+            return
 
         timer.stop()
 
@@ -224,13 +238,11 @@ class ThesisCtrl:
 
                 value = safeEval(fieldValue)
 
-            except (ValueError, SyntaxError):
+            except (ValueError, SyntaxError, ZeroDivisionError) as e:
 
-                error_dialog = QErrorMessage()
+                errorMessage(f"Invalid expression in field '{fieldText}'")
 
-                error_dialog.showMessage(f"Invalid expression in {fieldText}")
-
-                continue
+                raise e
 
             if fieldText == "number of steps":
 
@@ -253,26 +265,18 @@ class ThesisCtrl:
             self._view._timer.start(self._view._period)
 
 
+def errorMessage(message):
+
+    errorMsg = QErrorMessage()
+
+    errorMsg.showMessage(message)
+
+    errorMsg.exec_()
+
+
 def _translateInputs(inputs):
 
     return {argNames[label]: v for label, v in inputs.items()}
-
-
-def safeEval(expr: str):
-
-    exprNoConstants = expr
-
-    for constant in constants_names:
-
-        exprNoConstants = exprNoConstants.replace(constant, "")
-
-    chars = set(exprNoConstants)
-
-    if not chars.issubset("0123456789.+-*/()e"):
-
-        raise ValueError("invalid expression")
-
-    return eval(expr)  # pylint: disable=eval-used
 
 
 def main():
